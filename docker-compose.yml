@@ -1,16 +1,40 @@
 version: '3'
 services:
-  proxy:
+  nginx-proxy:
     image: jwilder/nginx-proxy
-    privileged: true
+    restart: on-failure
+    labels:
+      - com.github.jrcs.letsencrypt_nginx_proxy_companion.nginx_proxy=jwilder/nginx-proxy
     ports:
       - 80:80
       - 443:443
     volumes:
-      - /etc/nginx/vhost.d
-      - /usr/share/nginx/html
+      - ./proxy:/etc/nginx/vhost.d
+      - ./proxy:/usr/share/nginx/html
       - /var/run/docker.sock:/tmp/docker.sock:ro
-    restart: always
+      - ./certs:/etc/nginx/certs:ro
+    network_mode: bridge
+
+  letsencrypt:
+    image: jrcs/letsencrypt-nginx-proxy-companion
+    restart: on-failure
+    depends_on:
+      - nginx-proxy
+    volumes:
+      - ./proxy:/etc/nginx/vhost.d
+      - ./proxy:/usr/share/nginx/html
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./certs:/etc/nginx/certs:rw
+    network_mode: bridge
+
+  php:
+    build: ./php
+    volumes:
+      - www-data:/var/www
+    depends_on:
+      - db
+    network_mode: bridge
+
   nginx:
     image: nginx:latest
     ports:
@@ -20,36 +44,36 @@ services:
       - www-data:/var/www
     depends_on:
       - php
-    enviroment:
-      # - VIRTUAL_HOST: db.uplift.company
-      - VIRTUAL_HOST: db.uplift.local
+    links:
+      - php
+    environment:
+      # VIRTUAL_HOST: db.uplift.company
+      VIRTUAL_HOST: db.localhost
+    network_mode: bridge
+
   node:
     build: ./node
     image: node:12
     tty: true
     volumes:
       - ./node/app:/app
-      ports:
+    ports:
       - 8081:3000
-    enviroment:
-      # - VIRTUAL_HOST: app.uplift.company
-      - VIRTUAL_HOST: app.uplift.local
+    environment:
+      # VIRTUAL_HOST: app.uplift.company
+      VIRTUAL_HOST: app.localhost
+    network_mode: bridge
+
   static:
     image: nginx:latest
     ports:
       - 8082:8080
     volumes:
-      - ./static/:/var/www/html
-    enviroment:
-      # - VIRTUAL_HOST: dashboard.uplift.company
-      - VIRTUAL_HOST: dashboard.uplift.local
-
-  php:
-    build: ./php
-    volumes:
-      - www-data:/var/www
-    depends_on:
-      - db
+      - ./static/:/usr/share/nginx/html
+    environment:
+      # VIRTUAL_HOST: dashboard.uplift.company
+      VIRTUAL_HOST: dashboard.localhost
+    network_mode: bridge
 
   db:
     image: mysql:5.7
@@ -69,6 +93,7 @@ services:
       - 8888:80
     depends_on:
       - db
+    network_mode: bridge
 
 # volumes を定義する
 volumes:
@@ -81,3 +106,5 @@ volumes:
     #external: trues
   # mysql dbのインストールパス
   mysql-data:
+  proxy:
+  app:
