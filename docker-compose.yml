@@ -1,5 +1,16 @@
 version: '3'
 services:
+  proxy:
+    image: jwilder/nginx-proxy
+    privileged: true
+    ports:
+      - 80:80
+      - 443:443
+    volumes:
+      - /etc/nginx/vhost.d
+      - /usr/share/nginx/html
+      - /var/run/docker.sock:/tmp/docker.sock:ro
+    restart: always
   nginx:
     image: nginx:latest
     ports:
@@ -9,6 +20,29 @@ services:
       - www-data:/var/www
     depends_on:
       - php
+    enviroment:
+      # - VIRTUAL_HOST: db.uplift.company
+      - VIRTUAL_HOST: db.uplift.local
+  node:
+    build: ./node
+    image: node:12
+    tty: true
+    volumes:
+      - ./node/app:/app
+      ports:
+      - 8081:3000
+    enviroment:
+      # - VIRTUAL_HOST: app.uplift.company
+      - VIRTUAL_HOST: app.uplift.local
+  static:
+    image: nginx:latest
+    ports:
+      - 8082:8080
+    volumes:
+      - ./static/:/var/www/html
+    enviroment:
+      # - VIRTUAL_HOST: dashboard.uplift.company
+      - VIRTUAL_HOST: dashboard.uplift.local
 
   php:
     build: ./php
@@ -16,22 +50,7 @@ services:
       - www-data:/var/www
     depends_on:
       - db
-  https-portal:
-    image: steveltn/https-portal:1
-    ports:
-      - '80:80'
-      - '443:443'
-    links:
-      - nginx
-    restart: always
-    volumes:
-      - ./certs:/var/lib/https-portal
-    environment:
-      STAGE: 'production'
-      DOMAINS: >-
-        db.uplift.company -> http://nginx:8080
-    depends_on:
-      - php
+
   db:
     image: mysql:5.7
     ports:  
